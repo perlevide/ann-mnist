@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# CuPy gives the from scratch trainer a GPU: python train_scratch.py --device cuda
+# Choose the wheel matching your CUDA runtime, which nvidia-smi reports.
+#   cupy-cuda13x   CUDA 13.x, matches a torch cu130 install
+#   cupy-cuda12x   CUDA 12.x
+cupy-cuda13x>=13.0

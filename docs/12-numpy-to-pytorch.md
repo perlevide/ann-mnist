@@ -98,14 +98,15 @@ default for `nn.Linear` is a Kaiming uniform variant that differs slightly.
 ## The numbers
 
 Twenty epochs, `784 -> 256 -> 128 -> 10`, ReLU, SGD with momentum 0.9,
-learning rate 0.05, batch 128, seed 0, on CPU:
+learning rate 0.05, batch 128, seed 0. Both columns measured on the same CPU
+in one `benchmark.py` run:
 
 | | NumPy | PyTorch |
 |---|---|---|
 | test accuracy | 0.9827 | 0.9832 |
 | test loss | 0.0918 | 0.0908 |
 | parameters | 235,146 | 235,146 |
-| time | 15.5 s | 24.8 s |
+| time | 26.5 s | 42.7 s |
 
 The accuracies agree to within run to run noise, which is the point: the
 hand written backward pass is correct.
@@ -118,78 +119,9 @@ the ordering reverses by a wide margin.
 
 ## Running on a GPU
 
-`train_scratch.py` is NumPy and will always use the CPU. NumPy has no GPU
-backend; CuPy is the drop-in replacement if you ever want one. Only
-`train_torch.py` can move to a GPU.
-
-Start with:
-
-```
-python check_gpu.py
-```
-
-It prints the PyTorch version, whether that build contains CUDA at all,
-whether a GPU is visible, and a matmul timing on both devices.
-
-The answer is usually one of three.
-
-`built with CUDA  no (CPU-only build)` means PyTorch itself has no CUDA in
-it, so the GPU is irrelevant. On Windows this is what plain
-`pip install torch` gives you, because the wheel PyPI serves for Windows is
-CPU-only and about 120 MB. The CUDA build is several times that and comes
-from a different index:
-
-```
-pip uninstall -y torch
-pip install torch --index-url https://download.pytorch.org/whl/cu130
-```
-
-Check `nvidia-smi` first. If the driver is older than the CUDA release in
-that URL, use an earlier tag such as cu128 or cu126, or update the driver.
-pytorch.org/get-started/locally builds the exact command.
-
-`cuda available   False` on a CUDA build means the driver is missing, too
-old, or the GPU is not visible to this process.
-
-Both available, and it still feels slow: see the next section, because for a
-model this small that is expected.
-
-`--device cuda` fails with an explanation instead of falling back, which is
-deliberate. A silent fallback is how a run ends up twenty times slower than
-expected and nobody notices. `--device auto` still falls back, but prints
-why.
-
-## Why a GPU may not help here
-
-A GPU is thousands of small cores waiting for work large enough to fill
-them. This model is 235,146 parameters and a batch is 128 by 784. Each layer
-is one small matmul that a modern CPU finishes in microseconds, so the run
-is dominated by everything around the arithmetic: Python loop overhead,
-kernel launches, and the copy of each batch from host memory to the device.
-
-Two things in this project address the copy.
-
-`DeviceBatches` in `src/torchmlp/dataset.py` uploads the whole split once and
-slices it on the device. MNIST as float32 is 170 MB for the training split,
-so it fits comfortably. This is the default on a GPU, and
-`--no-resident` switches back to a standard DataLoader for comparison. On
-CPU the resident path is already about 30 percent faster in this project
-(8.3 s against 11.8 s for eight epochs), purely from dropping the DataLoader
-machinery.
-
-`enable_tf32()` turns on TensorFloat-32 matmuls, which keep the float32
-exponent and truncate the mantissa to 10 bits. Accuracy on this model is
-unaffected and the tensor cores do the work. `--no-tf32` disables it.
-
-Even so, expect the GPU win on this model to be modest. What makes a GPU
-pull ahead by an order of magnitude is more arithmetic per byte moved: wider
-layers, larger batches, and convolutions. Try `--hidden 4096 4096
---batch-size 1024` and the ordering becomes obvious.
-
-The two loaders shuffle with different random streams, DataLoader through
-NumPy and `DeviceBatches` through `torch.randperm`, so switching between
-them changes the result slightly at the same seed. Each is reproducible on
-its own.
+Both trainers take `--device cuda`. PyTorch needs a CUDA build; the from
+scratch trainer needs CuPy. [Chapter 14](14-running-on-a-gpu.md) covers the
+setup, the measurements, and why a model this small does not benefit much.
 
 ## What PyTorch gives you that NumPy does not
 

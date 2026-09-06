@@ -1,2 +1,6 @@
 -r requirements.txt
+
+# CPU build. For CUDA, install torch from the PyTorch index instead:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu130
+# Pick the cu tag that matches your driver; nvidia-smi shows the CUDA version.
 torch>=2.0

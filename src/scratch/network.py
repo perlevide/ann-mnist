@@ -6,8 +6,10 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
+import numpy as _np
 
+from .. import backend
+from ..backend import xp as np
 from ..data import iterate_minibatches
 from ..metrics import accuracy
 from . import activations as act
@@ -43,7 +45,7 @@ class MLP:
         self.init_name = init or initializers.default_for(activation)
         self.seed = seed
 
-        rng = np.random.default_rng(seed)
+        rng = backend.default_rng(seed)
         self.layers: list = []
         for i in range(len(layer_sizes) - 1):
             self.layers.append(Linear(layer_sizes[i], layer_sizes[i + 1], rng, self.init_name))
@@ -83,8 +85,13 @@ class MLP:
         outputs = [self.forward(x[i : i + batch_size], training=False) for i in range(0, len(x), batch_size)]
         return np.concatenate(outputs, axis=0)
 
-    def predict(self, x: np.ndarray, batch_size: int = 1000) -> np.ndarray:
-        return self.predict_logits(x, batch_size).argmax(axis=1)
+    def predict(self, x: np.ndarray, batch_size: int = 1000) -> "_np.ndarray":
+        """Predicted class per sample, always returned as a NumPy array.
+
+        Metrics and plotting live on the host, so results come back from the
+        device here rather than at every call site.
+        """
+        return backend.to_numpy(self.predict_logits(x, batch_size).argmax(axis=1))
 
     def predict_proba(self, x: np.ndarray, batch_size: int = 1000) -> np.ndarray:
         return act.softmax(self.predict_logits(x, batch_size))
@@ -92,7 +99,8 @@ class MLP:
     def evaluate(self, x: np.ndarray, y: np.ndarray, batch_size: int = 1000) -> tuple:
         logits = self.predict_logits(x, batch_size)
         loss = self.loss_fn.forward(logits, y)
-        return loss, accuracy(logits.argmax(axis=1), y)
+        predicted = backend.to_numpy(logits.argmax(axis=1))
+        return loss, accuracy(predicted, backend.to_numpy(y))
 
     def fit(
         self,
@@ -119,8 +127,8 @@ class MLP:
         if isinstance(optimizer, str):
             optimizer = build_optimizer(optimizer, learning_rate, momentum, weight_decay)
 
-        rng = np.random.default_rng(self.seed if seed is None else seed)
-        n_batches = int(np.ceil(len(x_train) / batch_size))
+        rng = backend.default_rng(self.seed if seed is None else seed)
+        n_batches = int(_np.ceil(len(x_train) / batch_size))
         started = time.time()
 
         for epoch in range(1, epochs + 1):
@@ -152,6 +160,7 @@ class MLP:
             if verbose:
                 print(message)
 
+        backend.synchronize()
         self.history["seconds"] = time.time() - started
         return self.history
 
@@ -162,8 +171,8 @@ class MLP:
         arrays = {}
         for index, layer in enumerate(self.layers):
             for key, value in layer.parameters().items():
-                arrays[f"{index}.{key}"] = value
-        np.savez_compressed(path, **arrays)
+                arrays[f"{index}.{key}"] = backend.to_numpy(value)
+        _np.savez_compressed(path, **arrays)
         path.with_suffix(".json").write_text(
             json.dumps(
                 {
@@ -190,10 +199,10 @@ class MLP:
             init=meta.get("init"),
             seed=meta.get("seed", 0),
         )
-        arrays = np.load(path)
+        arrays = _np.load(path)
         for index, layer in enumerate(model.layers):
             for key in layer.parameters():
-                layer.parameters()[key][...] = arrays[f"{index}.{key}"]
+                layer.parameters()[key][...] = backend.asarray(arrays[f"{index}.{key}"])
         model.history = meta.get("history", model.history)
         return model
 

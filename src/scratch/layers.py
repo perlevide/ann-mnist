@@ -7,7 +7,7 @@ the forward pass is a plain matrix product and no transposes are needed.
 
 from __future__ import annotations
 
-import numpy as np
+from ..backend import xp as np
 
 from . import initializers
 

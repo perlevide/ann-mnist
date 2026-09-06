@@ -5,7 +5,10 @@ every derivative worked out by hand, and once in PyTorch. The NumPy version
 is there to show what the framework does; the PyTorch version is there
 because that is what you use afterwards.
 
-The [guide](docs/README.md) is thirteen chapters covering the theory, from
+Both run on the CPU or on an NVIDIA GPU. The from scratch one swaps NumPy for
+CuPy and keeps the hand written backward pass.
+
+The [guide](docs/README.md) is fourteen chapters covering the theory, from
 the single perceptron through backpropagation to optimizers and
 regularization. Every claim in it is checked against a run in this
 repository.
@@ -23,30 +26,44 @@ cd ann-mnist
 pip install -r requirements.txt
 
 python download_data.py          # 11 MB into data/raw
-python train_scratch.py          # NumPy, about 15 s on CPU
+python train_scratch.py          # NumPy, tens of seconds on CPU
 python -m pytest -q              # 43 tests, including gradient checks
 ```
 
-For the PyTorch half:
+## GPU
 
 ```bash
-pip install -r requirements-torch.txt
-python check_gpu.py               # is CUDA actually available?
-python train_torch.py
-```
+nvidia-smi                       # driver, and the CUDA version it supports
 
-On Windows, `pip install torch` installs the CPU-only wheel, so a machine
-with a working NVIDIA card still trains on the CPU. `check_gpu.py` says so
-in one line. The CUDA build comes from a separate index:
-
-```bash
-pip uninstall -y torch
 pip install torch --index-url https://download.pytorch.org/whl/cu130
+pip install cupy-cuda13x
+
+python check_gpu.py              # what each backend can see, plus a matmul timing
+python train_torch.py   --device cuda
+python train_scratch.py --device cuda
+python benchmark.py              # every combination available, into out/benchmark.md
 ```
 
-Check your driver with `nvidia-smi` first and pick an earlier tag (cu128,
-cu126) if it is older than that CUDA release. `train_scratch.py` is NumPy
-and always runs on the CPU.
+Match the cu tag to what `nvidia-smi` reports; use cu128 or cu126 and
+`cupy-cuda12x` on an older driver.
+
+PyTorch and CuPy are separate. `train_torch.py` needs the first,
+`train_scratch.py` needs the second, and neither implies the other.
+`--device cuda` fails with an explanation rather than falling back to the
+CPU, because a silent fallback is how a run ends up far slower than expected
+without anyone noticing. `--device auto` falls back but prints why.
+
+Expect modest gains on this model. 235,146 parameters at batch 128 is three
+small matmuls per step, which will not fill a GPU, so the run is dominated
+by launch overhead. `--hidden 4096 4096 --batch-size 1024` makes the
+difference obvious. [Chapter 14](docs/14-running-on-a-gpu.md) goes into why,
+and into the two things that do help: keeping the whole split in device
+memory instead of copying every batch, and TF32 matmuls.
+
+One trap worth naming: on Windows, plain `pip install torch` gives the
+CPU-only wheel from PyPI. The card is fine and `torch.cuda.is_available()`
+is still False. `check_gpu.py` says `built with CUDA no (CPU-only build)`
+when that is what happened.
 
 ## Workflow
 
@@ -56,10 +73,10 @@ python download_data.py
 
 # 2. train the from scratch model
 python train_scratch.py
-python train_scratch.py --hidden 512 256 --optimizer adam --lr 0.001 --epochs 30
+python train_scratch.py --device cuda --hidden 512 256 --optimizer adam --lr 0.001
 
 # 3. train the PyTorch model
-python train_torch.py --dropout 0.2 --lr-decay 0.95
+python train_torch.py --device cuda --dropout 0.2 --lr-decay 0.95
 
 # 4. score a saved model, write the confusion matrix
 python evaluate.py --model models/scratch_mlp.npz
@@ -74,9 +91,9 @@ python predict.py --model models/scratch_mlp.npz --images my_digits --invert
 # 7. check that backpropagation is right
 python -m pytest tests/test_gradcheck.py -v
 
-# 8. GPU: diagnose, then demand one instead of falling back to the CPU
+# 8. time every backend on this machine
 python check_gpu.py
-python train_torch.py --device cuda
+python benchmark.py
 ```
 
 ## Structure
@@ -85,18 +102,19 @@ python train_torch.py --device cuda
 ann-mnist/
 ├── data/                     MNIST, downloaded, not in git
 │   └── raw/                  the four idx.gz files
-├── docs/                     the guide, 13 chapters
+├── docs/                     the guide, 14 chapters
 │   └── figures/              plots the guide refers to
 ├── models/                   saved weights, not in git
 ├── notebooks/                scratch space
 ├── out/                      metrics and figures from each run
 ├── src/
+│   ├── backend.py            NumPy or CuPy, chosen before src.scratch loads
 │   ├── config.py             paths, defaults, TrainConfig
 │   ├── data.py               IDX parser, scaling, splits, batching
 │   ├── metrics.py            accuracy, confusion matrix, precision/recall/F1
 │   ├── plots.py              learning curves, heatmap, error grid, filters
 │   ├── seeds.py              reproducibility
-│   ├── scratch/              NumPy implementation, no autograd
+│   ├── scratch/              hand written implementation, no autograd
 │   │   ├── activations.py    ReLU, leaky ReLU, sigmoid, tanh, softmax
 │   │   ├── initializers.py   zeros, normal, Xavier, He
 │   │   ├── layers.py         Linear, Dropout, forward and backward
@@ -105,11 +123,12 @@ ann-mnist/
 │   │   ├── network.py        the MLP and the training loop
 │   │   └── gradcheck.py      finite difference verification
 │   └── torchmlp/             PyTorch implementation
-│       ├── dataset.py        the same IDX files, as DataLoaders or device tensors
+│       ├── dataset.py        DataLoader, or tensors resident on the device
 │       ├── model.py          nn.Sequential, matched initialization
 │       └── engine.py         train, evaluate, checkpoint, device selection
 ├── tests/                    43 tests
-├── check_gpu.py              CUDA diagnosis and a matmul timing
+├── benchmark.py              times every backend, writes out/benchmark.md
+├── check_gpu.py              what CUDA each library can see
 ├── download_data.py
 ├── train_scratch.py
 ├── train_torch.py
@@ -121,7 +140,8 @@ ann-mnist/
 ## Results
 
 Twenty epochs, `784 -> 256 -> 128 -> 10`, ReLU, He initialization, SGD with
-momentum 0.9, learning rate 0.05, batch 128, seed 0, CPU.
+momentum 0.9, learning rate 0.05, batch 128, seed 0. Both rows measured on
+the same CPU, in one `benchmark.py` run.
 
 | | NumPy | PyTorch |
 |---|---|---|
@@ -129,12 +149,12 @@ momentum 0.9, learning rate 0.05, batch 128, seed 0, CPU.
 | test loss | 0.0918 | 0.0908 |
 | macro F1 | 0.9825 | 0.9830 |
 | parameters | 235,146 | 235,146 |
-| training time | 15.5 s | 24.8 s |
+| training time | 26.5 s | 42.7 s |
 
 The two agree to within run to run noise, which is the point: the hand
 written backward pass is correct. PyTorch is slower on a model this small
-because its per operation overhead outweighs what it saves. That reverses on
-a GPU or with convolutions.
+because its per operation overhead outweighs what it saves. `benchmark.py`
+produces the same table for your own machine, including the GPU rows.
 
 Per class, from the NumPy run:
 
@@ -183,24 +203,6 @@ every other and nothing is learned. And the linear model at 0.8588 against
 0.9582 for one hidden layer is the whole argument for hidden layers, in one
 comparison.
 
-## GPU notes
-
-`train_torch.py --device cuda` fails with an explanation rather than falling
-back, because a silent fallback is how a run ends up far slower than
-expected without anyone noticing. `--device auto` falls back but prints the
-reason.
-
-On a GPU the whole split is uploaded once and sliced there, instead of
-copying every batch across the bus. MNIST as float32 is 170 MB, so it fits.
-`--no-resident` switches back to a standard DataLoader if you want to
-compare. Even on the CPU the resident path is about 30 percent faster here,
-8.3 s against 11.8 s over eight epochs.
-
-Expect the GPU win on this model to be modest anyway. 235,146 parameters
-with a batch of 128 is not enough arithmetic to fill thousands of cores, so
-the run is dominated by launch overhead. `--hidden 4096 4096 --batch-size
-1024` makes the difference obvious. Chapter 12 goes into why.
-
 ## The guide
 
 | # | Chapter |
@@ -218,6 +220,7 @@ the run is dominated by launch overhead. `--hidden 4096 4096 --batch-size
 | 11 | [Evaluation](docs/11-evaluation.md) |
 | 12 | [From NumPy to PyTorch](docs/12-numpy-to-pytorch.md) |
 | 13 | [What comes after the MLP](docs/13-what-comes-next.md) |
+| 14 | [Running on a GPU](docs/14-running-on-a-gpu.md) |
 
 Plus a [glossary](docs/glossary.md) in English and Vietnamese, and
 [references](docs/references.md).
@@ -233,8 +236,8 @@ The validation split is 10 percent of the training set, taken with a fixed
 seed. The test set is used once, at the end of a run, and never for choosing
 hyperparameters.
 
-Requirements: Python 3.10 or later, NumPy and matplotlib. PyTorch only for
-`train_torch.py`.
+Requirements: Python 3.10 or later, NumPy, matplotlib and Pillow.
+PyTorch for `train_torch.py`, CuPy for `train_scratch.py --device cuda`.
 
 ## License
 

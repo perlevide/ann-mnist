@@ -9,7 +9,7 @@ from layer to layer.
 
 from __future__ import annotations
 
-import numpy as np
+from ..backend import xp as np
 
 
 def zeros(shape: tuple, rng: np.random.Generator | None = None) -> np.ndarray:

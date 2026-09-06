@@ -70,6 +70,8 @@ gradient descent on a clean, centered, single channel dataset. That covers
 the mechanics completely, and the mechanics do not change. A transformer is
 trained by the same four lines in chapter 10.
 
-## Back to the start
+## Next
 
-[Guide index](README.md)
+[14. Running on a GPU](14-running-on-a-gpu.md), which is a practical
+chapter rather than a theoretical one, and worth reading before you assume
+bigger hardware will make any of the above faster.

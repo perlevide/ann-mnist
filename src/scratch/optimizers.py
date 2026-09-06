@@ -7,7 +7,7 @@ modifies the parameters in place.
 
 from __future__ import annotations
 
-import numpy as np
+from ..backend import xp as np
 
 
 class Optimizer:

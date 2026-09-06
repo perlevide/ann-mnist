@@ -8,7 +8,7 @@ and returns dL/d(input).
 
 from __future__ import annotations
 
-import numpy as np
+from ..backend import xp as np
 
 
 class Activation:

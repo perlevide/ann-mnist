@@ -142,7 +142,14 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "torch_summary.json").write_text(
         json.dumps(
-            {"config": config.as_dict(), "test_loss": test_loss, "test_accuracy": test_acc},
+            {
+                "config": config.as_dict(),
+                "device": str(device),
+                "resident": loaders["resident"],
+                "test_loss": test_loss,
+                "test_accuracy": test_acc,
+                "seconds": history["seconds"],
+            },
             indent=2,
         ),
         encoding="utf-8",

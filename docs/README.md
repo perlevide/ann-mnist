@@ -1,6 +1,6 @@
 # Guide
 
-Thirteen short chapters. They go in order: the maths comes first, the code
+Fourteen short chapters. They go in order: the maths comes first, the code
 that implements it comes second, and each chapter points at the file where
 that piece lives.
 
@@ -23,6 +23,7 @@ is.
 | 11 | [Evaluation](11-evaluation.md) | `src/metrics.py` |
 | 12 | [From NumPy to PyTorch](12-numpy-to-pytorch.md) | `src/torchmlp/` |
 | 13 | [What comes after the MLP](13-what-comes-next.md) | |
+| 14 | [Running on a GPU](14-running-on-a-gpu.md) | `src/backend.py` |
 
 Also here: a [glossary](glossary.md) of the terms in both English and
 Vietnamese, and [references](references.md) for the papers and books behind

@@ -7,7 +7,7 @@ upstream is the chain rule applied to that starting gradient.
 
 from __future__ import annotations
 
-import numpy as np
+from ..backend import xp as np
 
 from .activations import log_softmax, softmax
 

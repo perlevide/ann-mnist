@@ -15,9 +15,8 @@ import csv
 import time
 from pathlib import Path
 
+from src import backend
 from src.config import OUT_DIR, TrainConfig
-from src.data import load_splits
-from src.scratch.network import MLP
 from src.seeds import seed_everything
 
 STUDIES = {
@@ -48,6 +47,8 @@ STUDIES = {
 
 
 def run_one(splits, base: TrainConfig, override: dict, init: str | None) -> dict:
+    from src.scratch.network import MLP
+
     label = override.pop("label")
     settings = {**base.__dict__, **override}
     config = TrainConfig(**settings)
@@ -91,13 +92,20 @@ def main():
     parser.add_argument("--study", default="all", choices=[*STUDIES, "all"])
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--subset", type=int, default=20000, help="training samples, 0 for all")
+    parser.add_argument("--device", default="cpu", help="cpu (NumPy) or cuda (CuPy)")
     args = parser.parse_args()
+
+    backend.select(args.device)
+    from src.data import load_splits
 
     base = TrainConfig(epochs=args.epochs)
     splits = load_splits(val_fraction=base.val_fraction, normalize=base.normalize, seed=base.seed)
     if args.subset:
         splits["x_train"] = splits["x_train"][: args.subset]
         splits["y_train"] = splits["y_train"][: args.subset]
+    if backend.name != "numpy":
+        splits = {k: backend.asarray(v) for k, v in splits.items()}
+    print(backend.describe())
 
     names = list(STUDIES) if args.study == "all" else [args.study]
     OUT_DIR.mkdir(parents=True, exist_ok=True)

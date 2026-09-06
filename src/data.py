@@ -143,16 +143,23 @@ def iterate_minibatches(
 ):
     """Yield (x_batch, y_batch) pairs covering the data once.
 
+    Works on NumPy or CuPy arrays: the permutation is built with whichever
+    module owns `x`, so a GPU run never round trips indices through the host.
+
     Shuffling matters. If the batches always arrive in the same order the
     gradient noise becomes periodic and the model can lock onto that order
     instead of the data.
     """
+    from . import backend
+
+    xp = backend.array_module(x)
     n = len(x)
-    order = np.arange(n)
     if shuffle:
         if rng is None:
-            rng = np.random.default_rng()
-        rng.shuffle(order)
+            rng = xp.random.default_rng()
+        order = rng.permutation(n)
+    else:
+        order = xp.arange(n)
     for start in range(0, n, batch_size):
         idx = order[start : start + batch_size]
         yield x[idx], y[idx]
