@@ -15,12 +15,97 @@ import torch
 from torch import nn
 
 
-def pick_device(preference: str = "auto") -> torch.device:
+def backend_info() -> dict:
+    """What PyTorch build this is and whether it can see a GPU.
+
+    `torch.version.cuda` is None on a CPU-only wheel. That is the usual
+    reason a machine with a working NVIDIA card still trains on the CPU:
+    `pip install torch` on Windows takes the CPU-only build from PyPI.
+    """
+    info = {
+        "torch": torch.__version__,
+        "cuda_build": torch.version.cuda,
+        "cuda_available": torch.cuda.is_available(),
+        "device_count": 0,
+        "gpu": None,
+        "capability": None,
+    }
+    if info["cuda_available"]:
+        info["device_count"] = torch.cuda.device_count()
+        info["gpu"] = torch.cuda.get_device_name(0)
+        info["capability"] = ".".join(str(n) for n in torch.cuda.get_device_capability(0))
+    return info
+
+
+def explain_no_cuda(info: dict) -> str:
+    """Why CUDA is unavailable, and what to do about it."""
+    if info["cuda_build"] is None:
+        return (
+            f"PyTorch {info['torch']} is the CPU-only build, so it cannot use a GPU at all.\n"
+            "On Windows, plain `pip install torch` gives this build. Reinstall from the CUDA index:\n"
+            "  pip uninstall -y torch\n"
+            "  pip install torch --index-url https://download.pytorch.org/whl/cu130\n"
+            "Check your driver version with `nvidia-smi` first. If it is older than the CUDA\n"
+            "release above, use an earlier tag (cu128, cu126) or update the driver.\n"
+            "pytorch.org/get-started/locally builds the exact command for your setup."
+        )
+    return (
+        f"PyTorch {info['torch']} was built against CUDA {info['cuda_build']} but no GPU is\n"
+        "visible to it. Run `nvidia-smi`. If that fails, the driver is missing or too old.\n"
+        "If it works, the driver is likely older than the CUDA version this build needs."
+    )
+
+
+def pick_device(preference: str = "auto", verbose: bool = True) -> torch.device:
+    """Resolve --device into a torch.device, and say why when it is not cuda.
+
+    "auto" falls back to the CPU with a warning rather than silently.
+    "cuda" is a request, not a hint: it fails loudly instead of falling back,
+    because a silent fallback is how a run ends up 20 times slower than
+    expected without anyone noticing.
+    """
+    preference = preference.lower()
+    info = backend_info()
+
+    if preference == "cpu":
+        return torch.device("cpu")
+
+    if preference.startswith("cuda"):
+        if not info["cuda_available"]:
+            raise SystemExit("--device cuda was requested but is unavailable.\n\n" + explain_no_cuda(info))
+        return torch.device(preference)
+
     if preference != "auto":
         return torch.device(preference)
-    if torch.cuda.is_available():
+
+    if info["cuda_available"]:
         return torch.device("cuda")
+    if verbose:
+        print("no GPU available, training on the CPU")
+        print(explain_no_cuda(info))
+        print()
     return torch.device("cpu")
+
+
+def describe_device(device: torch.device) -> str:
+    info = backend_info()
+    if device.type != "cuda":
+        return f"device cpu (torch {info['torch']})"
+    return (
+        f"device cuda: {info['gpu']}, compute capability {info['capability']}, "
+        f"torch {info['torch']} built against CUDA {info['cuda_build']}"
+    )
+
+
+def enable_tf32() -> None:
+    """Let matmuls use TensorFloat-32 on Ampere and newer.
+
+    TF32 keeps the float32 exponent and truncates the mantissa to 10 bits.
+    Accuracy on this model is unaffected and the matmuls run several times
+    faster on the tensor cores. It does nothing on the CPU or on older GPUs.
+    """
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 
 def build_optimizer(model: nn.Module, config) -> torch.optim.Optimizer:
@@ -62,7 +147,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device) -> float:
     model.train()
     running = 0.0
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
         loss = criterion(model(x), y)
         loss.backward()
@@ -79,7 +164,7 @@ def evaluate(model, loader, criterion, device) -> tuple:
     correct = 0
     seen = 0
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         logits = model(x)
         total_loss += criterion(logits, y).item() * len(y)
         correct += (logits.argmax(dim=1) == y).sum().item()
@@ -93,8 +178,8 @@ def predict(model, loader, device) -> tuple:
     model.eval()
     predictions, truths = [], []
     for x, y in loader:
-        predictions.append(model(x.to(device)).argmax(dim=1).cpu().numpy())
-        truths.append(y.numpy())
+        predictions.append(model(x.to(device, non_blocking=True)).argmax(dim=1).cpu().numpy())
+        truths.append(y.cpu().numpy())
     return np.concatenate(predictions), np.concatenate(truths)
 
 

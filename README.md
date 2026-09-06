@@ -31,8 +31,22 @@ For the PyTorch half:
 
 ```bash
 pip install -r requirements-torch.txt
+python check_gpu.py               # is CUDA actually available?
 python train_torch.py
 ```
+
+On Windows, `pip install torch` installs the CPU-only wheel, so a machine
+with a working NVIDIA card still trains on the CPU. `check_gpu.py` says so
+in one line. The CUDA build comes from a separate index:
+
+```bash
+pip uninstall -y torch
+pip install torch --index-url https://download.pytorch.org/whl/cu130
+```
+
+Check your driver with `nvidia-smi` first and pick an earlier tag (cu128,
+cu126) if it is older than that CUDA release. `train_scratch.py` is NumPy
+and always runs on the CPU.
 
 ## Workflow
 
@@ -59,6 +73,10 @@ python predict.py --model models/scratch_mlp.npz --images my_digits --invert
 
 # 7. check that backpropagation is right
 python -m pytest tests/test_gradcheck.py -v
+
+# 8. GPU: diagnose, then demand one instead of falling back to the CPU
+python check_gpu.py
+python train_torch.py --device cuda
 ```
 
 ## Structure
@@ -87,10 +105,11 @@ ann-mnist/
 │   │   ├── network.py        the MLP and the training loop
 │   │   └── gradcheck.py      finite difference verification
 │   └── torchmlp/             PyTorch implementation
-│       ├── dataset.py        the same IDX files, as DataLoaders
+│       ├── dataset.py        the same IDX files, as DataLoaders or device tensors
 │       ├── model.py          nn.Sequential, matched initialization
-│       └── engine.py         train, evaluate, checkpoint
+│       └── engine.py         train, evaluate, checkpoint, device selection
 ├── tests/                    43 tests
+├── check_gpu.py              CUDA diagnosis and a matmul timing
 ├── download_data.py
 ├── train_scratch.py
 ├── train_torch.py
@@ -163,6 +182,24 @@ accuracy and loss 2.3031, which is $\log 10$: every unit stays identical to
 every other and nothing is learned. And the linear model at 0.8588 against
 0.9582 for one hidden layer is the whole argument for hidden layers, in one
 comparison.
+
+## GPU notes
+
+`train_torch.py --device cuda` fails with an explanation rather than falling
+back, because a silent fallback is how a run ends up far slower than
+expected without anyone noticing. `--device auto` falls back but prints the
+reason.
+
+On a GPU the whole split is uploaded once and sliced there, instead of
+copying every batch across the bus. MNIST as float32 is 170 MB, so it fits.
+`--no-resident` switches back to a standard DataLoader if you want to
+compare. Even on the CPU the resident path is about 30 percent faster here,
+8.3 s against 11.8 s over eight epochs.
+
+Expect the GPU win on this model to be modest anyway. 235,146 parameters
+with a batch of 128 is not enough arithmetic to fill thousands of cores, so
+the run is dominated by launch overhead. `--hidden 4096 4096 --batch-size
+1024` makes the difference obvious. Chapter 12 goes into why.
 
 ## The guide
 

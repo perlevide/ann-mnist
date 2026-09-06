@@ -31,7 +31,26 @@ def parse_args():
     parser.add_argument("--dropout", type=float, default=defaults.dropout)
     parser.add_argument("--lr-decay", type=float, default=defaults.lr_decay)
     parser.add_argument("--seed", type=int, default=defaults.seed)
-    parser.add_argument("--device", default="auto", help="auto, cpu or cuda")
+    parser.add_argument(
+        "--device",
+        default="auto",
+        help="auto, cpu, cuda, or cuda:N. 'cuda' fails loudly if no GPU is usable; "
+        "'auto' falls back to the CPU and explains why",
+    )
+    parser.add_argument(
+        "--resident",
+        dest="resident",
+        action="store_true",
+        default=None,
+        help="hold the whole split in device memory (default on a GPU)",
+    )
+    parser.add_argument(
+        "--no-resident",
+        dest="resident",
+        action="store_false",
+        help="use a standard DataLoader instead (default on the CPU)",
+    )
+    parser.add_argument("--no-tf32", action="store_true", help="disable TensorFloat-32 matmuls")
     parser.add_argument("--out", default=MODEL_DIR / "torch_mlp.pt")
     parser.add_argument("--no-plots", action="store_true")
     return parser.parse_args()
@@ -49,7 +68,15 @@ def main():
         ) from None
 
     from src.torchmlp.dataset import build_loaders
-    from src.torchmlp.engine import evaluate, fit, pick_device, predict, save_checkpoint
+    from src.torchmlp.engine import (
+        describe_device,
+        enable_tf32,
+        evaluate,
+        fit,
+        pick_device,
+        predict,
+        save_checkpoint,
+    )
     from src.torchmlp.model import build_model
 
     config = TrainConfig(
@@ -68,15 +95,26 @@ def main():
     seed_everything(config.seed)
 
     device = pick_device(args.device)
+    if device.type == "cuda" and not args.no_tf32:
+        enable_tf32()
+
     loaders = build_loaders(
         batch_size=config.batch_size,
         val_fraction=config.val_fraction,
         normalize=config.normalize,
         seed=config.seed,
+        device=device,
+        resident=args.resident,
     )
     model = build_model(config, device)
 
-    print(f"device {device}")
+    print(describe_device(device))
+    held = loaders["train"].bytes_held() if loaders["resident"] else 0
+    print(
+        "batches: tensors resident on the device" + (f", {held / 1e6:.0f} MB for the training split" if held else "")
+        if loaders["resident"]
+        else "batches: DataLoader, copied to the device per batch"
+    )
     print(model)
     print(f"{model.n_parameters():,} trainable parameters\n")
 
