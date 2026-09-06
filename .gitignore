@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+data/raw/
+data/*.npz
+models/*.npz
+models/*.pt
+models/*.json
+out/*.png
+out/*.csv
+out/*.json
