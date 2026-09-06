@@ -20,7 +20,21 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe", action="store_true", help="run the CuPy operation staircase")
+    parser.add_argument(
+        "--staircase",
+        action="store_true",
+        help="run only the staircase in this process, without importing torch",
+    )
+    parser.add_argument(
+        "--with-torch", action="store_true", help="with --staircase, import torch first"
+    )
     args = parser.parse_args()
+
+    if args.staircase:
+        if args.with_torch:
+            import torch  # noqa: F401
+        probe_cupy(show_config=not args.with_torch)
+        return
 
     report_torch()
     print()
@@ -28,7 +42,7 @@ def main():
 
     if args.probe:
         print()
-        probe_cupy()
+        compare_with_and_without_torch()
         return
 
     print()
@@ -37,7 +51,62 @@ def main():
         print(f"  {label:<14} {ms:>8.1f} ms")
 
 
-def probe_cupy() -> None:
+def has_torch() -> bool:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def compare_with_and_without_torch() -> None:
+    """Run the staircase twice in fresh processes, once with torch loaded and once without.
+
+    This matters because both libraries ship their own CUDA runtime. Whichever
+    is imported first can decide which cuBLAS the process ends up using, so a
+    program that imports both can work while one that imports only CuPy fails,
+    or the reverse. `train_scratch.py` never imports torch; this script does,
+    which is exactly the difference worth measuring.
+    """
+    import subprocess
+    import sys
+
+    variants = [("CuPy alone", [])]
+    if has_torch():
+        variants.append(("torch imported first", ["--with-torch"]))
+
+    for label, extra in variants:
+        print(f"=== {label} ===")
+        result = subprocess.run(
+            [sys.executable, __file__, "--staircase", *extra],
+            capture_output=True,
+            text=True,
+        )
+        print(result.stdout.rstrip())
+        if result.stderr.strip():
+            print(result.stderr.rstrip())
+        print()
+
+    if len(variants) == 1:
+        print("PyTorch is not installed, so there is nothing to compare against.")
+        return
+
+    print(
+        "If these two disagree, the CUDA libraries are being resolved differently\n"
+        "depending on import order. `cupy.show_config()` above reports which CUDA\n"
+        "root CuPy picked; when that points inside torch's package directory, CuPy\n"
+        "is borrowing torch's libraries rather than the ones installed for it.\n"
+        "Fixes, in order of preference:\n"
+        "  1. Point CUDA_PATH at CuPy's own libraries, so import order stops mattering:\n"
+        "       $env:CUDA_PATH = \"$PWD\\.venv\\Lib\\site-packages\\nvidia\\cu13\"\n"
+        "     Set it permanently with setx once it works.\n"
+        "  2. Keep CuPy and PyTorch in separate virtual environments.\n"
+        "  3. Use train_torch.py --device cuda for GPU work and leave the from\n"
+        "     scratch trainer on the CPU, where it is fast enough anyway."
+    )
+
+
+def probe_cupy(show_config: bool = True) -> None:
     """Run CuPy through increasingly demanding operations and stop at the first failure.
 
     A failure at "allocate" or "elementwise" points at the install. A failure
@@ -51,11 +120,12 @@ def probe_cupy() -> None:
         print("CuPy is not installed, nothing to probe")
         return
 
-    print("build configuration")
-    print("-" * 60)
-    cupy.show_config()
-    print("-" * 60)
-    print()
+    if show_config:
+        print("build configuration")
+        print("-" * 60)
+        cupy.show_config()
+        print("-" * 60)
+        print()
 
     steps = [
         ("allocate", lambda: cupy.zeros((128, 784), dtype=cupy.float32)),
