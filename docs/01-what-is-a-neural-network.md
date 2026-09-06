@@ -68,9 +68,10 @@ You can check the depth claim yourself:
 python experiments.py --study depth
 ```
 
-On a 20000 sample subset with five epochs, the linear model reaches 0.859
-validation accuracy and one hidden layer reaches 0.958. The second hidden
-layer adds much less, and the third almost nothing. That flattening is
+On a 20000 sample subset with five epochs, averaged over three seeds, the
+linear model reaches 0.882 validation accuracy and one hidden layer reaches
+0.958. The second hidden layer adds 0.005 and the third takes it back, both
+inside the seed spread. That flattening is
 normal for MNIST with fully connected layers, and it is where convolutional
 networks start to pull ahead.
 

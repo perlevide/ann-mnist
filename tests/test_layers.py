@@ -55,6 +55,16 @@ def test_dropout_is_identity_in_eval_mode():
     assert np.array_equal(layer.forward(x, training=False), x)
 
 
+def test_dropout_mask_is_float32():
+    """The mask multiplies the activations, so a float64 mask would silently
+    promote the whole forward pass to double precision."""
+    rng = np.random.default_rng(5)
+    layer = Dropout(0.3, rng)
+    out = layer.forward(np.ones((10, 4), dtype=np.float32), training=True)
+    assert layer.mask.dtype == np.float32
+    assert out.dtype == np.float32
+
+
 def test_inverted_dropout_preserves_expectation():
     rng = np.random.default_rng(4)
     layer = Dropout(0.5, rng)

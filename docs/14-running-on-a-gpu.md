@@ -111,8 +111,8 @@ machine:
 
 | run | time | test accuracy |
 |---|---|---|
-| from scratch (NumPy) | 26.5 s | 0.9827 |
-| PyTorch, DataLoader | 42.7 s | 0.9832 |
+| from scratch (NumPy) | 34.4 s | 0.9828 |
+| PyTorch, DataLoader | 39.6 s | 0.9832 |
 
 Absolute times depend on the CPU, so treat the ratio as the finding and
 generate your own table.

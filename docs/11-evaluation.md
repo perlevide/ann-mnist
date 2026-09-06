@@ -4,8 +4,8 @@ Code: `src/metrics.py`, `src/plots.py`, `evaluate.py`
 
 ## Accuracy is not enough
 
-The default run reaches 0.9827 on the test set. That is 173 wrong out of
-10000, and accuracy alone says nothing about which 173.
+The default run reaches 0.9828 on the test set. That is 172 wrong out of
+10000, and accuracy alone says nothing about which 172.
 
 MNIST is close to balanced, roughly 1000 images per class, so accuracy is at
 least honest here. On an unbalanced problem it stops being informative: a
@@ -27,11 +27,11 @@ shows the same thing as a heatmap.
 From the default run, the most frequent mistakes:
 
 ```
-7 -> 9: 9
-5 -> 3: 9
-9 -> 4: 7
-9 -> 7: 5
-6 -> 4: 5
+9 -> 4: 9
+4 -> 9: 8
+5 -> 3: 8
+9 -> 7: 7
+7 -> 9: 6
 ```
 
 These are the pairs you would predict from the shapes. A 4 with a closed top
@@ -56,17 +56,18 @@ From the run:
 
 ```
  class  precision   recall       f1  support
-     0     0.9858   0.9929   0.9893      980
-     1     0.9930   0.9947   0.9938     1135
+     0     0.9838   0.9918   0.9878      980
+     1     0.9921   0.9912   0.9916     1135
      ...
-     9     0.9753   0.9782   0.9767     1009
+     9     0.9780   0.9713   0.9746     1009
 
-accuracy 9827/10000 = 0.9827
-macro f1 0.9825
+accuracy 9828/10000 = 0.9828
+macro f1 0.9827
 ```
 
-Class 1 is the easiest, class 9 the hardest. That ordering is stable across
-runs and across model types, because it comes from the data.
+Class 1 is the easiest and class 9 the hardest, by a wider margin than the
+run to run variation. That ordering is stable across seeds and across model
+types, because it comes from the data rather than from the model.
 
 Macro F1 averages the per class scores with equal weight, so every class
 counts the same regardless of size. Micro averaging weights by support and
@@ -89,8 +90,8 @@ preprocessing, label alignment, or normalization.
 The two do not always move together:
 
 ```
-epoch  8/20  loss 0.0131  val_loss 0.1029  val_acc 0.9778
-epoch 20/20  loss 0.0001  val_loss 0.1113  val_acc 0.9817
+epoch  7/20  loss 0.0146  val_loss 0.0981  val_acc 0.9748
+epoch 20/20  loss 0.0001  val_loss 0.1071  val_acc 0.9817
 ```
 
 Validation loss got worse while validation accuracy got better. Accuracy

@@ -17,16 +17,25 @@ The measurement:
 python experiments.py --study init
 ```
 
-| init | train acc | val acc | val loss |
-|---|---|---|---|
-| zeros | 0.1111 | 0.1092 | 2.3031 |
-| normal (std 0.01) | 0.9855 | 0.9583 | 0.1424 |
-| xavier | 0.9960 | 0.9652 | 0.1260 |
-| he | 0.9943 | 0.9605 | 0.1521 |
+Five epochs, 20000 samples, three seeds per setting:
 
-The zeros row is worth staring at. Accuracy 0.109 is chance on ten classes,
-and loss 2.3031 is $\log 10$, the loss of a model that outputs a uniform
-distribution. Five epochs of training moved nothing.
+| init | val acc | spread across seeds | val loss |
+|---|---|---|---|
+| zeros | 0.1092 | 0.0000 | 2.3030 |
+| normal (std 0.01) | 0.9614 | 0.0045 | 0.1281 |
+| xavier | 0.9637 | 0.0032 | 0.1344 |
+| he | 0.9631 | 0.0028 | 0.1355 |
+
+The zeros row is worth staring at. Accuracy 0.1092 is chance on ten classes,
+and loss 2.3030 is $\log 10$, the loss of a model that outputs a uniform
+distribution. Five epochs of training moved nothing, and the spread of
+exactly zero says every seed produced the identical dead network, which is
+the symmetry argument showing up as a number.
+
+The other three are within noise of each other. Even the naive fixed scale
+works here, because three layers is not deep enough for a wrong scale to
+compound. Chapter 06 explains why it compounds; this table is the reminder
+that a short shallow experiment cannot show it.
 
 Biases are a different case. They are usually initialized to zero and that is
 fine, because the weights have already broken the symmetry.
@@ -85,10 +94,10 @@ $$\text{Var}(w) = \frac{2}{n_{\text{in}}}, \qquad w \sim \mathcal{N}\left(0, \sq
 He with ReLU or leaky ReLU, Xavier with tanh or sigmoid.
 `default_for(activation)` in the code picks this for you.
 
-The 0.9652 against 0.9605 in the table above is inside run to run noise, not
-evidence that Xavier beats He. Three layers is not deep enough for the
-difference to show. The comparison that does show is either of them against
-`normal`, and both against `zeros`.
+The Xavier against He difference in the table is inside the seed spread, so
+that table is not evidence either way. The comparison that does show is any
+of them against `zeros`. Pick by activation because the derivations say to,
+not because a five epoch MNIST run said so.
 
 ## A sanity check
 

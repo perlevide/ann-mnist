@@ -1,7 +1,9 @@
 -r requirements.txt
 
 # CuPy gives the from scratch trainer a GPU: python train_scratch.py --device cuda
+# The [ctk] extra pulls the CUDA headers through pip. Without them CuPy sees the
+# GPU but cannot compile its kernels, since it builds them at runtime with NVRTC.
 # Choose the wheel matching your CUDA runtime, which nvidia-smi reports.
-#   cupy-cuda13x   CUDA 13.x, matches a torch cu130 install
-#   cupy-cuda12x   CUDA 12.x
-cupy-cuda13x>=13.0
+#   cupy-cuda13x[ctk]   CUDA 13.x, matches a torch cu130 install
+#   cupy-cuda12x[ctk]   CUDA 12.x
+cupy-cuda13x[ctk]>=13.0

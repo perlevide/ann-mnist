@@ -7,9 +7,9 @@ Code: `src/scratch/layers.py`, `src/scratch/losses.py`, `src/scratch/optimizers.
 From the run in `out/scratch_summary.json`:
 
 ```
-epoch  1  loss 0.2235  acc 0.9726  val_loss 0.1366  val_acc 0.9598
-epoch  8  loss 0.0131  acc 0.9984  val_loss 0.1029  val_acc 0.9778
-epoch 20  loss 0.0001  acc 1.0000  val_loss 0.1113  val_acc 0.9817
+epoch  1/20  loss 0.2239  acc 0.9734  val_loss 0.1254  val_acc 0.9605
+epoch  7/20  loss 0.0146  acc 0.9956  val_loss 0.0981  val_acc 0.9748
+epoch 20/20  loss 0.0001  acc 1.0000  val_loss 0.1071  val_acc 0.9817
 ```
 
 Training loss reaches $10^{-4}$ and training accuracy reaches exactly 1.000.
@@ -103,22 +103,54 @@ augmentation; it is a good exercise to add.
 
 ## Measured
 
+Two runs, because the answer depends on whether the model has had time to
+overfit yet.
+
+Five epochs on a 20000 sample subset, three seeds:
+
 ```
 python experiments.py --study regularization
 ```
 
-| setting | train acc | val acc | val loss |
-|---|---|---|---|
-| none | 0.9943 | 0.9605 | 0.1521 |
-| L2 1e-4 | 0.9951 | 0.9628 | 0.1336 |
-| dropout 0.2 | 0.9875 | 0.9613 | 0.1277 |
-| both | 0.9845 | 0.9598 | 0.1404 |
+| setting | train acc | val acc | spread | val loss |
+|---|---|---|---|---|
+| none | 0.9951 | 0.9631 | 0.0028 | 0.1355 |
+| L2 1e-4 | 0.9942 | 0.9628 | 0.0008 | 0.1369 |
+| dropout 0.2 | 0.9861 | 0.9597 | 0.0050 | 0.1416 |
+| both | 0.9859 | 0.9588 | 0.0038 | 0.1359 |
 
-Look at the training column as much as the validation column. Dropout pulls
-train accuracy down from 0.9943 to 0.9875 while validation stays level and
-validation loss improves, which is regularization doing its job. Five epochs
-on a 20000 sample subset is too short for the gains to be large, and
-stacking both is already slightly too much for a model this size.
+Nothing helps, and dropout costs a little. That is the correct result: at
+five epochs on a subset the model has not finished fitting the training data,
+so holding it back can only slow it down. Regularizing a model that is still
+underfitting makes it worse.
+
+Twenty epochs on the full training set, two seeds:
+
+```
+python experiments.py --study regularization --epochs 20 --subset 0 --seeds 2
+```
+
+| setting | train acc | val acc | spread | val loss |
+|---|---|---|---|---|
+| none | 1.0000 | 0.9812 | 0.0008 | 0.1061 |
+| L2 1e-4 | 1.0000 | 0.9810 | 0.0000 | 0.0743 |
+| dropout 0.2 | 0.9981 | 0.9806 | 0.0005 | 0.0922 |
+| both | 0.9961 | 0.9788 | 0.0017 | 0.0872 |
+
+Now the model has memorized the training set, and the result is more
+interesting than the textbook version. Validation accuracy barely moves,
+inside the seed spread in every case. Validation loss improves a great deal:
+L2 takes it from 0.1061 to 0.0743, a 30 percent reduction, and dropout to
+0.0922.
+
+So on this problem regularization buys calibration, not accuracy. The
+unregularized model gets the same digits right, and is much more confidently
+wrong about the ones it misses. Chapter 11 has the same distinction from the
+other direction, where accuracy improves while loss gets worse.
+
+That is worth taking seriously before reporting that a technique "did not
+help" because accuracy did not move. Which number you look at decides the
+answer.
 
 ## Order of operations
 

@@ -13,7 +13,7 @@ the single perceptron through backpropagation to optimizers and
 regularization. Every claim in it is checked against a run in this
 repository.
 
-Test accuracy: 0.9827 with NumPy, 0.9832 with PyTorch. Same architecture,
+Test accuracy: 0.9828 with NumPy, 0.9832 with PyTorch. Same architecture,
 same data, same seed.
 
 ![learning curves](docs/figures/learning-curves.png)
@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 python download_data.py          # 11 MB into data/raw
 python train_scratch.py          # NumPy, tens of seconds on CPU
-python -m pytest -q              # 43 tests, including gradient checks
+python -m pytest -q              # 54 tests, including gradient checks
 ```
 
 ## GPU
@@ -126,7 +126,7 @@ ann-mnist/
 │       ├── dataset.py        DataLoader, or tensors resident on the device
 │       ├── model.py          nn.Sequential, matched initialization
 │       └── engine.py         train, evaluate, checkpoint, device selection
-├── tests/                    43 tests
+├── tests/                    54 tests
 ├── benchmark.py              times every backend, writes out/benchmark.md
 ├── check_gpu.py              what CUDA each library can see
 ├── download_data.py
@@ -140,38 +140,40 @@ ann-mnist/
 ## Results
 
 Twenty epochs, `784 -> 256 -> 128 -> 10`, ReLU, He initialization, SGD with
-momentum 0.9, learning rate 0.05, batch 128, seed 0. Both rows measured on
-the same CPU, in one `benchmark.py` run.
+momentum 0.9, learning rate 0.05, batch 128, seed 0. Both columns from one
+`benchmark.py` run on the same CPU.
 
 | | NumPy | PyTorch |
 |---|---|---|
-| test accuracy | 0.9827 | 0.9832 |
-| test loss | 0.0918 | 0.0908 |
-| macro F1 | 0.9825 | 0.9830 |
+| test accuracy | 0.9828 | 0.9832 |
+| test loss | 0.0969 | 0.0908 |
+| macro F1 | 0.9827 | 0.9830 |
 | parameters | 235,146 | 235,146 |
-| training time | 26.5 s | 42.7 s |
+| training time | 34.4 s | 39.6 s |
 
 The two agree to within run to run noise, which is the point: the hand
-written backward pass is correct. PyTorch is slower on a model this small
-because its per operation overhead outweighs what it saves. `benchmark.py`
-produces the same table for your own machine, including the GPU rows.
+written backward pass is correct. On the CPU they also land in the same
+speed range, and absolute times move by tens of percent between runs on a
+shared machine, so run `benchmark.py` on yours rather than trusting these
+seconds.
 
 Per class, from the NumPy run:
 
 | class | precision | recall | F1 | support |
 |---|---|---|---|---|
-| 0 | 0.9858 | 0.9929 | 0.9893 | 980 |
-| 1 | 0.9930 | 0.9947 | 0.9938 | 1135 |
-| 2 | 0.9864 | 0.9806 | 0.9835 | 1032 |
-| 3 | 0.9773 | 0.9812 | 0.9792 | 1010 |
-| 4 | 0.9798 | 0.9857 | 0.9827 | 982 |
-| 5 | 0.9831 | 0.9753 | 0.9792 | 892 |
-| 6 | 0.9842 | 0.9781 | 0.9812 | 958 |
-| 7 | 0.9787 | 0.9815 | 0.9801 | 1028 |
-| 8 | 0.9824 | 0.9764 | 0.9794 | 974 |
-| 9 | 0.9753 | 0.9782 | 0.9767 | 1009 |
+| 0 | 0.9838 | 0.9918 | 0.9878 | 980 |
+| 1 | 0.9921 | 0.9912 | 0.9916 | 1135 |
+| 2 | 0.9825 | 0.9816 | 0.9821 | 1032 |
+| 3 | 0.9812 | 0.9842 | 0.9827 | 1010 |
+| 4 | 0.9817 | 0.9827 | 0.9822 | 982 |
+| 5 | 0.9842 | 0.9798 | 0.9820 | 892 |
+| 6 | 0.9843 | 0.9823 | 0.9833 | 958 |
+| 7 | 0.9777 | 0.9815 | 0.9796 | 1028 |
+| 8 | 0.9815 | 0.9805 | 0.9810 | 974 |
+| 9 | 0.9780 | 0.9713 | 0.9746 | 1009 |
 
-The most frequent mistakes are 7 read as 9, 5 read as 3, and 9 read as 4.
+The most frequent mistakes are 9 read as 4, 4 read as 9, and 5 read as 3.
+Class 9 has the lowest recall and class 1 the highest F1, run after run.
 Those are the pairs that overlap in handwriting, which suggests the model
 learned something about shape rather than about pixel positions.
 
@@ -179,29 +181,38 @@ learned something about shape rather than about pixel positions.
 
 ## Ablations
 
-Five epochs on a 20000 sample subset, run with `python experiments.py`.
-Short runs, so read the large gaps and ignore the small ones.
+`python experiments.py --study all`. Five epochs on a 20000 sample subset,
+three seeds per setting, reporting mean validation accuracy and the spread
+across seeds.
 
-| activation | val acc | | initialization | val acc |
-|---|---|---|---|---|
-| relu | 0.9605 | | zeros | 0.1092 |
-| tanh | 0.9622 | | normal 0.01 | 0.9583 |
-| leaky_relu | 0.9628 | | xavier | 0.9652 |
-| sigmoid | 0.9385 | | he | 0.9605 |
+The spread is why it is there. A single short run separates most of these
+settings by less than the seed-to-seed variation, so only differences that
+clear the spread mean anything.
 
-| optimizer | val acc | | depth | val acc |
-|---|---|---|---|---|
-| sgd | 0.9413 | | 0 hidden (linear) | 0.8588 |
-| sgd + momentum | 0.9605 | | 1 hidden | 0.9582 |
-| nesterov | 0.9512 | | 2 hidden | 0.9605 |
-| rmsprop | 0.9447 | | 3 hidden | 0.9613 |
-| adam | 0.9617 | | | |
+| activation | val acc | spread | | initialization | val acc | spread |
+|---|---|---|---|---|---|---|
+| relu | 0.9631 | 0.0028 | | zeros | 0.1092 | 0.0000 |
+| tanh | 0.9616 | 0.0013 | | normal 0.01 | 0.9614 | 0.0045 |
+| leaky_relu | 0.9620 | 0.0053 | | xavier | 0.9637 | 0.0032 |
+| sigmoid | 0.9382 | 0.0018 | | he | 0.9631 | 0.0028 |
 
-Two rows are worth reading closely. Zero initialization gives 0.1092
-accuracy and loss 2.3031, which is $\log 10$: every unit stays identical to
-every other and nothing is learned. And the linear model at 0.8588 against
-0.9582 for one hidden layer is the whole argument for hidden layers, in one
-comparison.
+| optimizer | val acc | spread | | depth | val acc | spread |
+|---|---|---|---|---|---|---|
+| sgd | 0.9468 | 0.0022 | | 0 hidden (linear) | 0.8819 | 0.0350 |
+| sgd + momentum | 0.9631 | 0.0028 | | 1 hidden | 0.9582 | 0.0080 |
+| nesterov | 0.9627 | 0.0028 | | 2 hidden | 0.9631 | 0.0028 |
+| rmsprop | 0.9609 | 0.0028 | | 3 hidden | 0.9596 | 0.0017 |
+| adam | 0.9614 | 0.0027 | | | | |
+
+What survives the spread: sigmoid is clearly behind the ReLU family; zero
+initialization learns nothing at all, sitting at chance with loss 2.3030,
+which is $\log 10$; plain SGD is clearly behind SGD with momentum; and the
+linear model is far behind anything with a hidden layer.
+
+What does not survive: ReLU against tanh, He against Xavier, Adam against
+momentum, and two hidden layers against three. At this scale and this many
+epochs those are all ties, and any table claiming otherwise from single runs
+is reporting seed noise.
 
 ## The guide
 

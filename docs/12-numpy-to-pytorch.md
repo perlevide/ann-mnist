@@ -103,19 +103,21 @@ in one `benchmark.py` run:
 
 | | NumPy | PyTorch |
 |---|---|---|
-| test accuracy | 0.9827 | 0.9832 |
-| test loss | 0.0918 | 0.0908 |
+| test accuracy | 0.9828 | 0.9832 |
+| test loss | 0.0969 | 0.0908 |
 | parameters | 235,146 | 235,146 |
-| time | 26.5 s | 42.7 s |
+| time | 34.4 s | 39.6 s |
 
 The accuracies agree to within run to run noise, which is the point: the
 hand written backward pass is correct.
 
-PyTorch being slower here is not a mistake. This model is small enough that
-its per operation overhead, the DataLoader, and the graph bookkeeping cost
-more than they save, while the NumPy version is a handful of large BLAS calls
-with nothing around them. Move to a GPU, or to a convolutional network, and
-the ordering reverses by a wide margin.
+The times are close enough that this run does not rank them, and repeating
+the measurement moves both by tens of percent on a shared machine. What you
+can say is that PyTorch has no speed advantage here: the model is small
+enough that its per operation overhead, the DataLoader and the graph
+bookkeeping cost about as much as they save, while the NumPy version is a
+handful of large BLAS calls with nothing around them. Move to a GPU, or to a
+convolutional network, and the ordering stops being close.
 
 ## Running on a GPU
 

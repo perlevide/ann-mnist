@@ -40,13 +40,7 @@ class Linear(Layer):
     every sample. The third is what gets handed to the previous layer.
     """
 
-    def __init__(
-        self,
-        n_in: int,
-        n_out: int,
-        rng: np.random.Generator,
-        init: str = "he",
-    ):
+    def __init__(self, n_in: int, n_out: int, rng, init: str = "he"):
         self.n_in = n_in
         self.n_out = n_out
         self.W = initializers.get(init)((n_in, n_out), rng)
@@ -81,7 +75,7 @@ class Dropout(Layer):
     way inference needs no rescaling and can simply return the input.
     """
 
-    def __init__(self, p: float, rng: np.random.Generator):
+    def __init__(self, p: float, rng):
         if not 0.0 <= p < 1.0:
             raise ValueError("dropout probability must be in [0, 1)")
         self.p = p
@@ -93,7 +87,8 @@ class Dropout(Layer):
             self.mask = None
             return x
         keep = 1.0 - self.p
-        self.mask = (self.rng.random(x.shape) < keep).astype(np.float32) / keep
+        draws = self.rng.random(x.shape, dtype=np.float32)
+        self.mask = (draws < keep).astype(np.float32) / np.float32(keep)
         return x * self.mask
 
     def backward(self, grad_out):

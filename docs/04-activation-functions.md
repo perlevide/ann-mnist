@@ -111,19 +111,24 @@ The value is unchanged and every exponent is now at most zero. That is what
 python experiments.py --study activation
 ```
 
-Five epochs, 20000 training samples, otherwise identical settings:
+Five epochs, 20000 training samples, three seeds per setting, everything
+else identical:
 
-| activation | train acc | val acc | val loss |
-|---|---|---|---|
-| relu | 0.9943 | 0.9605 | 0.1521 |
-| tanh | 0.9971 | 0.9622 | 0.1270 |
-| leaky_relu | 0.9967 | 0.9628 | 0.1367 |
-| sigmoid | 0.9574 | 0.9385 | 0.2010 |
+| activation | val acc | spread across seeds |
+|---|---|---|
+| relu | 0.9631 | 0.0028 |
+| leaky_relu | 0.9620 | 0.0053 |
+| tanh | 0.9616 | 0.0013 |
+| sigmoid | 0.9382 | 0.0018 |
 
-Sigmoid is clearly behind after the same number of epochs. Tanh keeps up with
-ReLU here, which is what you should expect from a network only three layers
-deep. The gap opens with depth, and this network is too shallow to show it.
-Try `--hidden 128 128 128 128 128 128` if you want to watch sigmoid fail
+Sigmoid is behind by about two and a half points, far outside the seed to
+seed spread, so that gap is real. The other three are separated by less than
+their own spread, which means this experiment cannot rank them. Do not read
+0.9631 against 0.9616 as ReLU beating tanh.
+
+That tie is what you should expect from a network three layers deep. The
+argument for ReLU is about depth, and this network has none to speak of. Try
+`--hidden 128 128 128 128 128 128` if you want to watch sigmoid fail
 properly.
 
 ## Choosing

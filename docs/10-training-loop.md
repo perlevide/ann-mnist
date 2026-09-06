@@ -52,16 +52,16 @@ end.
 From the default run:
 
 ```
-epoch   1/20  loss 0.2235  acc 0.9726  val_loss 0.1366  val_acc 0.9598
-epoch   5/20  loss 0.0287  acc 0.9941  val_loss 0.1065  val_acc 0.9748
-epoch  10/20  loss 0.0048  acc 0.9992  val_loss 0.1063  val_acc 0.9777
-epoch  20/20  loss 0.0001  acc 1.0000  val_loss 0.1113  val_acc 0.9817
+epoch   1/20  loss 0.2239  acc 0.9734  val_loss 0.1254  val_acc 0.9605
+epoch   5/20  loss 0.0291  acc 0.9922  val_loss 0.1081  val_acc 0.9728
+epoch  10/20  loss 0.0073  acc 0.9966  val_loss 0.1151  val_acc 0.9728
+epoch  20/20  loss 0.0001  acc 1.0000  val_loss 0.1071  val_acc 0.9817
 ```
 
 Epoch 1 already at 0.96 validation is normal for MNIST; it is an easy
 dataset. The training loss falls by three orders of magnitude while
-validation loss flattens at about 0.10 and then rises slightly. That divergence
-is overfitting, and it starts around epoch 7.
+validation loss flattens around 0.10 and then wanders without improving.
+That divergence is overfitting, and it starts around epoch 7.
 
 Reported training accuracy is measured after the epoch with dropout off, so
 it is comparable with validation accuracy. The running mean of the batch

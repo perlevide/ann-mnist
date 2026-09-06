@@ -64,6 +64,7 @@ def select(device: str = "auto") -> str:
             ) from None
         if cupy.cuda.runtime.getDeviceCount() == 0:
             raise SystemExit("CuPy is installed but no CUDA device is visible. Run nvidia-smi.")
+        _check_can_compile(cupy)
         _set_cupy(cupy)
         return name
 
@@ -78,6 +79,30 @@ def select(device: str = "auto") -> str:
         _set_numpy()
         print("CuPy not available, the from scratch network runs on the CPU")
     return name
+
+
+def _check_can_compile(cupy) -> None:
+    """Compile one trivial kernel before training starts.
+
+    CuPy builds its elementwise kernels at runtime with NVRTC, so it needs
+    the CUDA headers, not only the driver. A pip install of `cupy-cuda13x`
+    alone does not bring them, and the failure otherwise arrives mid run as a
+    traceback from inside a ufunc.
+    """
+    try:
+        float((cupy.zeros(4, dtype=cupy.float32) + 1).sum())
+    except Exception as exc:
+        message = str(exc)
+        if "CUDA headers" in message or "CUDA_PATH" in message or "nvrtc" in message.lower():
+            raise SystemExit(
+                "CuPy sees the GPU but cannot compile kernels: it has no CUDA headers.\n"
+                "Install them alongside CuPy:\n"
+                '  pip install "cupy-cuda13x[ctk]"      (or cupy-cuda12x[ctk] on CUDA 12)\n'
+                "That pulls the toolkit through pip, so no separate CUDA install is needed.\n"
+                "The alternative is the full CUDA Toolkit with CUDA_PATH pointing at it.\n"
+                f"\nOriginal error: {message.strip().splitlines()[-1]}"
+            ) from None
+        raise
 
 
 def _set_numpy() -> None:

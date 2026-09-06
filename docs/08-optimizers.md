@@ -122,21 +122,29 @@ exponential form.
 python experiments.py --study optimizer
 ```
 
-| optimizer | train acc | val acc | val loss |
+Five epochs, 20000 samples, three seeds per setting:
+
+| optimizer | val acc | spread across seeds | val loss |
 |---|---|---|---|
-| sgd | 0.9729 | 0.9413 | 0.1925 |
-| sgd + momentum | 0.9943 | 0.9605 | 0.1521 |
-| nesterov | 0.9837 | 0.9512 | 0.1872 |
-| rmsprop | 0.9770 | 0.9447 | 0.1990 |
-| adam | 0.9927 | 0.9617 | 0.1282 |
+| sgd | 0.9468 | 0.0022 | 0.1744 |
+| sgd + momentum | 0.9631 | 0.0028 | 0.1355 |
+| nesterov | 0.9627 | 0.0028 | 0.1436 |
+| rmsprop | 0.9609 | 0.0028 | 0.1405 |
+| adam | 0.9614 | 0.0027 | 0.1330 |
 
-Note that each optimizer here uses its own conventional learning rate, 0.05
-for the SGD family and 0.001 for RMSProp and Adam, because comparing them at
-a single rate would only measure which one happens to like that rate.
+Each optimizer uses its own conventional learning rate, 0.05 for the SGD
+family and 0.001 for RMSProp and Adam, because comparing them at one shared
+rate would only measure which one happens to like that rate.
 
-Momentum is the clear win over plain SGD, and Adam has the lowest validation
-loss. Nesterov landing below plain momentum is run to run variation at five
-epochs, not a real ordering.
+Momentum is worth about 1.6 points over plain SGD, six times the seed
+spread, so that one is real. Everything after it is a tie: momentum,
+Nesterov, RMSProp and Adam all land within 0.0022 of each other with spreads
+of 0.0028. On this problem the adaptive methods buy nothing that momentum
+has not already bought.
+
+That is not an argument against Adam. It is an argument that MNIST with a
+small MLP is too easy to separate them, and that a benchmark run once per
+setting would have produced a confident ranking out of noise.
 
 ## Choosing
 
