@@ -101,6 +101,29 @@ this size, and keeps the indices on the device.
 wraps a NumPy Generator and hides every method CuPy lacks, so anything that
 works against it will work on the device.
 
+## When it fails on the GPU only
+
+```
+python check_gpu.py --probe
+```
+
+runs CuPy through a staircase: allocate, elementwise, reduction, random
+numbers, argsort, fancy indexing, then matmuls at the shapes this project
+uses. It stops at the first failure and prints `cupy.show_config()` first,
+so the version of every piece is on the same screen.
+
+Where it stops tells you what is wrong. A failure at allocate or elementwise
+is the install or the headers. A failure that begins at the first matmul is
+cuBLAS, which is a separate library from CuPy's own kernels and is loaded
+separately, so it can be the only broken component. That usually means two
+cuBLAS libraries on the search path, one from pip under
+`site-packages/nvidia` and one from a system CUDA install, or a major
+version that does not match the wheel.
+
+`backend.select("cuda")` runs a short version of the same check before
+training starts, so these failures surface in the first second rather than
+partway through an epoch.
+
 ## Timing it honestly
 
 Both CUDA libraries queue work rather than running it. A timing block

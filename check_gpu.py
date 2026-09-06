@@ -1,23 +1,120 @@
 """Report what each backend can see, and time a matmul on every one available.
 
     python check_gpu.py
+    python check_gpu.py --probe     when something fails and you need to know where
 
 Two independent questions. PyTorch needs a CUDA build to use the GPU, and
 `train_torch.py` depends on it. The from scratch trainer needs CuPy for
 `--device cuda`, and runs on NumPy otherwise. Neither implies the other.
+
+`--probe` runs CuPy through a staircase of operations, from allocating an
+array to the matmul shapes this project actually uses, and reports the first
+one that fails together with the build versions. It separates a broken
+library load from a real problem with the arrays.
 """
 
+import argparse
 import time
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--probe", action="store_true", help="run the CuPy operation staircase")
+    args = parser.parse_args()
+
     report_torch()
     print()
     report_cupy()
+
+    if args.probe:
+        print()
+        probe_cupy()
+        return
+
     print()
     print("matmul, 4096 x 4096 float32, median of 5")
     for label, ms in timings():
         print(f"  {label:<14} {ms:>8.1f} ms")
+
+
+def probe_cupy() -> None:
+    """Run CuPy through increasingly demanding operations and stop at the first failure.
+
+    A failure at "allocate" or "elementwise" points at the install. A failure
+    that starts at the first matmul points at cuBLAS, which is a separate
+    library from the CuPy kernels and is loaded separately, so it can be the
+    only broken piece.
+    """
+    try:
+        import cupy
+    except ImportError:
+        print("CuPy is not installed, nothing to probe")
+        return
+
+    print("build configuration")
+    print("-" * 60)
+    cupy.show_config()
+    print("-" * 60)
+    print()
+
+    steps = [
+        ("allocate", lambda: cupy.zeros((128, 784), dtype=cupy.float32)),
+        ("elementwise", lambda: cupy.zeros((128, 784), dtype=cupy.float32) + 1),
+        ("reduction", lambda: cupy.zeros((128, 784), dtype=cupy.float32).sum()),
+        ("rng", lambda: cupy.random.default_rng(0).standard_normal((128, 784), dtype=cupy.float32)),
+        ("argsort", lambda: cupy.random.default_rng(0).random(1000).argsort()),
+        ("fancy index", lambda: cupy.zeros((1000, 8), dtype=cupy.float32)[cupy.arange(128)]),
+        ("matmul 4x4", lambda: _matmul(cupy, (4, 4), (4, 4))),
+        ("matmul 128x784 @ 784x512", lambda: _matmul(cupy, (128, 784), (784, 512))),
+        ("matmul float64", lambda: _matmul(cupy, (128, 784), (784, 512), cupy.float64)),
+        ("matmul non-contiguous", lambda: _matmul_strided(cupy)),
+    ]
+
+    for label, call in steps:
+        try:
+            result = call()
+            cupy.cuda.Device().synchronize()
+            detail = ""
+            if hasattr(result, "shape"):
+                flags = "C" if result.flags.c_contiguous else "F" if result.flags.f_contiguous else "-"
+                detail = f"  -> {result.shape} {result.dtype} {flags}"
+            print(f"  ok    {label}{detail}")
+        except Exception as exc:
+            print(f"  FAIL  {label}")
+            print(f"        {type(exc).__name__}: {exc}")
+            print()
+            print("Everything above this line works, so the problem is in this step.")
+            if "matmul" in label:
+                print(
+                    "A failure that begins at the first matmul is cuBLAS, not CuPy's own\n"
+                    "kernels. cuBLAS is a separate library loaded separately, so it can be\n"
+                    "the only broken piece. Usual causes, in order:\n"
+                    "  1. Two cuBLAS libraries on the search path, one from pip under\n"
+                    "     site-packages/nvidia and one from a system CUDA install. Check\n"
+                    "     CUDA_PATH and PATH, and prefer one source.\n"
+                    "  2. A cuBLAS major version that does not match the CuPy wheel.\n"
+                    "     cupy-cuda13x wants CUDA 13; cupy-cuda12x wants CUDA 12.\n"
+                    "  3. A driver older than the toolkit the wheel was built against.\n"
+                    "Reinstalling into a clean venv with only cupy-cuda13x[ctk] and no\n"
+                    "system CUDA on PATH is the fastest way to rule out the first two."
+                )
+            return
+
+    print()
+    print("every step passed, so CuPy is healthy on this machine")
+
+
+def _matmul(cupy, shape_a, shape_b, dtype=None):
+    dtype = dtype or cupy.float32
+    a = cupy.ones(shape_a, dtype=dtype)
+    b = cupy.ones(shape_b, dtype=dtype)
+    return a @ b
+
+
+def _matmul_strided(cupy):
+    """A slice with a gap, to check whether cuBLAS is being handed bad strides."""
+    big = cupy.ones((256, 784), dtype=cupy.float32)
+    return big[::2] @ cupy.ones((784, 64), dtype=cupy.float32)
 
 
 def report_torch() -> None:

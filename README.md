@@ -39,6 +39,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu130
 pip install cupy-cuda13x
 
 python check_gpu.py              # what each backend can see, plus a matmul timing
+python check_gpu.py --probe      # when a GPU run fails, find the step that breaks
 python train_torch.py   --device cuda
 python train_scratch.py --device cuda
 python benchmark.py              # every combination available, into out/benchmark.md

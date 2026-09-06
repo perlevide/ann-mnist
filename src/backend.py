@@ -64,7 +64,7 @@ def select(device: str = "auto") -> str:
             ) from None
         if cupy.cuda.runtime.getDeviceCount() == 0:
             raise SystemExit("CuPy is installed but no CUDA device is visible. Run nvidia-smi.")
-        _check_can_compile(cupy)
+        _smoke_test(cupy)
         _set_cupy(cupy)
         return name
 
@@ -81,13 +81,14 @@ def select(device: str = "auto") -> str:
     return name
 
 
-def _check_can_compile(cupy) -> None:
-    """Compile one trivial kernel before training starts.
+def _smoke_test(cupy) -> None:
+    """Exercise the two libraries a run depends on, before training starts.
 
     CuPy builds its elementwise kernels at runtime with NVRTC, so it needs
-    the CUDA headers, not only the driver. A pip install of `cupy-cuda13x`
-    alone does not bring them, and the failure otherwise arrives mid run as a
-    traceback from inside a ufunc.
+    the CUDA headers rather than only the driver. Matrix products go through
+    cuBLAS, which is a separate library loaded separately and can be the only
+    broken piece. Both failures otherwise arrive mid epoch as a traceback
+    from inside CuPy.
     """
     try:
         float((cupy.zeros(4, dtype=cupy.float32) + 1).sum())
@@ -103,6 +104,23 @@ def _check_can_compile(cupy) -> None:
                 f"\nOriginal error: {message.strip().splitlines()[-1]}"
             ) from None
         raise
+
+    try:
+        a = cupy.ones((8, 16), dtype=cupy.float32)
+        b = cupy.ones((16, 4), dtype=cupy.float32)
+        float((a @ b).sum())
+    except Exception as exc:
+        raise SystemExit(
+            f"CuPy can run its own kernels but cannot multiply two matrices.\n"
+            f"  {type(exc).__name__}: {exc}\n\n"
+            "Matrix products go through cuBLAS, a separate library from CuPy's kernels,\n"
+            "so it can be the only broken piece. Run\n"
+            "  python check_gpu.py --probe\n"
+            "which prints the build versions and finds the first operation that fails.\n"
+            "The usual cause is two cuBLAS libraries on the search path, one from pip\n"
+            "under site-packages/nvidia and one from a system CUDA install.\n\n"
+            "Meanwhile the CPU path is unaffected: python train_scratch.py"
+        ) from None
 
 
 def _set_numpy() -> None:
