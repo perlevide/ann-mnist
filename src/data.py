@@ -157,7 +157,7 @@ def iterate_minibatches(
     if shuffle:
         if rng is None:
             rng = xp.random.default_rng()
-        order = rng.permutation(n)
+        order = backend.permutation(rng, n)
     else:
         order = xp.arange(n)
     for start in range(0, n, batch_size):

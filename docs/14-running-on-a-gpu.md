@@ -80,6 +80,27 @@ TF32 is also enabled on a GPU. It keeps the float32 exponent and truncates
 the mantissa to 10 bits, which lets the tensor cores do the matmuls.
 Accuracy on this model is unaffected. `--no-tf32` turns it off.
 
+## Where CuPy is not NumPy
+
+CuPy is a drop-in replacement until it is not, and the gaps only appear at
+run time on a machine with a card in it. Two showed up building this.
+
+Scalars must stay on the host. `np.sqrt(2.0 / fan_in)` looks harmless and is
+correct under NumPy. Under CuPy it asks the GPU to compile and launch a
+kernel to take one square root, and it fails outright when the CUDA headers
+are missing. `math.sqrt` for scalars, the array module for arrays.
+
+CuPy's `Generator` is a subset of NumPy's. As of CuPy 14 it has `random`,
+`uniform`, `standard_normal` and `integers`, but no `permutation`, no
+`shuffle` and no `choice`. Shuffling a training set therefore cannot use
+`rng.permutation(n)`. `backend.permutation` sorts n random keys instead,
+which gives the same result in O(n log n) rather than O(n), microseconds at
+this size, and keeps the indices on the device.
+
+`tests/test_gpu_api_compat.py` catches this class of bug without a GPU. It
+wraps a NumPy Generator and hides every method CuPy lacks, so anything that
+works against it will work on the device.
+
 ## Timing it honestly
 
 Both CUDA libraries queue work rather than running it. A timing block

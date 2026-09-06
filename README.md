@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 python download_data.py          # 11 MB into data/raw
 python train_scratch.py          # NumPy, tens of seconds on CPU
-python -m pytest -q              # 54 tests, including gradient checks
+python -m pytest -q              # 64 tests, including gradient checks
 ```
 
 ## GPU
@@ -126,7 +126,7 @@ ann-mnist/
 │       ├── dataset.py        DataLoader, or tensors resident on the device
 │       ├── model.py          nn.Sequential, matched initialization
 │       └── engine.py         train, evaluate, checkpoint, device selection
-├── tests/                    54 tests
+├── tests/                    64 tests
 ├── benchmark.py              times every backend, writes out/benchmark.md
 ├── check_gpu.py              what CUDA each library can see
 ├── download_data.py

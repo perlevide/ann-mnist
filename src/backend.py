@@ -136,6 +136,49 @@ def default_rng(seed: int):
     return xp.random.default_rng(seed)
 
 
+def permutation(rng, n: int):
+    """A random permutation of range(n), from whichever Generator is active.
+
+    CuPy's Generator implements a subset of the NumPy Generator API. As of
+    CuPy 14 it has `random`, `uniform`, `standard_normal` and `integers`, but
+    no `permutation`, `shuffle` or `choice`. Sorting n random keys gives the
+    same thing: O(n log n) instead of O(n), which for 54000 elements is
+    microseconds, and it keeps the indices on the device.
+
+    NumPy keeps its own `permutation` so that existing runs stay
+    reproducible against the numbers published in docs/.
+    """
+    if hasattr(rng, "permutation"):
+        return rng.permutation(n)
+    return rng.random(n).argsort()
+
+
+# Generator methods CuPy 14 provides. Anything outside this set has to be
+# reached through a helper above, or the GPU path breaks at run time.
+CUPY_GENERATOR_METHODS = frozenset(
+    {
+        "random",
+        "uniform",
+        "integers",
+        "standard_normal",
+        "standard_exponential",
+        "standard_gamma",
+        "beta",
+        "binomial",
+        "chisquare",
+        "dirichlet",
+        "exponential",
+        "f",
+        "gamma",
+        "geometric",
+        "hypergeometric",
+        "logseries",
+        "poisson",
+        "power",
+    }
+)
+
+
 def asarray(a):
     """Move a NumPy array onto the active device. A no-op under NumPy."""
     return xp.asarray(a)

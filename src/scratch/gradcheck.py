@@ -1,4 +1,8 @@
-"""Numerical gradient checking.
+"""Numerical gradient checking. NumPy and the CPU only.
+
+Finite differences need float64 to be meaningful, and the check is a
+correctness tool rather than something you run during training, so this
+module uses NumPy directly instead of the swappable array backend.
 
 Backpropagation is easy to get subtly wrong: a missing transpose, a sum over
 the wrong axis, a factor of N. The check here compares the analytic gradient
