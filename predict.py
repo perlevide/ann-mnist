@@ -1,13 +1,7 @@
 """Run a saved model on your own digit images.
 
-    python predict.py --model models/scratch_mlp.npz --images my_digits
-    python predict.py --model models/torch_mlp.pt --images my_digits --out out/predictions.csv
-
-The images are converted to MNIST's convention: 28 by 28 grayscale, white
-stroke on a black background, the digit centered by its center of mass. A
-photo of a digit written in black ink on white paper needs inverting, which
-`--invert` does. Skipping this step is the usual reason a model with 98
-percent test accuracy fails on your own handwriting.
+    python predict.py --model models/scratch_mlp.npz --images my_digits --invert
+    python predict.py --model models/torch_mlp.pt --images my_digits --out out/predictions.csv --invert
 """
 
 import argparse
@@ -15,26 +9,44 @@ import csv
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
-from src.config import IMAGE_SIZE, MNIST_MEAN, MNIST_STD, MODEL_DIR, OUT_DIR
+from src.config import MNIST_MEAN, MNIST_STD, MODEL_DIR, OUT_DIR
 
 
 def load_image(path: Path, invert: bool) -> np.ndarray:
-    from PIL import Image
-
-    image = Image.open(path).convert("L").resize((IMAGE_SIZE, IMAGE_SIZE), Image.LANCZOS)
+    image = Image.open(path).convert("L")
     array = np.asarray(image, dtype=np.float32) / 255.0
+
     if invert:
         array = 1.0 - array
-    return array
+
+    array[array < 0.50] = 0.0
+
+    mask = array > 0.0
+    if mask.any():
+        nz_y, nz_x = np.nonzero(mask)
+        array = array[nz_y.min() : nz_y.max() + 1, nz_x.min() : nz_x.max() + 1]
+
+    h, w = array.shape
+    scale = 20.0 / max(h, w)
+    new_h = max(1, int(round(h * scale)))
+    new_w = max(1, int(round(w * scale)))
+
+    digit_pil = Image.fromarray((array * 255).astype(np.uint8)).resize(
+        (new_w, new_h), Image.LANCZOS
+    )
+    digit_array = np.asarray(digit_pil, dtype=np.float32) / 255.0
+
+    canvas = np.zeros((28, 28), dtype=np.float32)
+    start_y = (28 - new_h) // 2
+    start_x = (28 - new_w) // 2
+    canvas[start_y : start_y + new_h, start_x : start_x + new_w] = digit_array
+
+    return canvas
 
 
 def center_by_mass(image: np.ndarray) -> np.ndarray:
-    """Shift the digit so its center of mass sits in the middle of the frame.
-
-    MNIST was built this way. A model trained on centered digits has never
-    seen one in the corner and will happily misread it.
-    """
     total = image.sum()
     if total <= 0:
         return image
@@ -59,12 +71,20 @@ def main():
     if not paths:
         raise SystemExit(f"no images found in {args.images}")
 
+    processed_dir = Path("processed_digits")
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
     batch = []
     for path in paths:
         image = load_image(path, args.invert)
         if not args.no_center:
             image = center_by_mass(image)
+
+        save_img = Image.fromarray((image * 255).astype(np.uint8))
+        save_img.save(processed_dir / f"processed_{path.name}")
+
         batch.append(image.reshape(-1))
+
     x = (np.stack(batch) - MNIST_MEAN) / MNIST_STD
 
     from evaluate import load_any
@@ -80,8 +100,11 @@ def main():
         for path, label in zip(paths, predicted):
             print(f"{path.name:>30}  {label}")
             writer.writerow([path.name, int(label)])
+
     print(f"\nwrote {out_path}")
+    print(f"saved processed images to {processed_dir.resolve()}")
 
 
 if __name__ == "__main__":
     main()
+    
